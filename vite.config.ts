@@ -9,11 +9,11 @@ import basicSsl from '@vitejs/plugin-basic-ssl'
 export default defineConfig({
   server: {
     // use the below two to use https for mobile qr permissions
-    // https: {},
-    // host: true,
+    https: {},
+    host: true,
     port: 3000,
   },
-  plugins: [tsconfigPaths(), react(), tailwindcss()], // add " , basicSsl() " to use https for mobile qr permissions
+  plugins: [tsconfigPaths(), react(), tailwindcss() , basicSsl()], // add " , basicSsl() " to use https for mobile qr permissions
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

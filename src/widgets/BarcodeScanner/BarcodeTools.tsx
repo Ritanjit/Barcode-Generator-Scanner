@@ -79,19 +79,19 @@ export default function EnhancedBarcodeToolkit() {
             await new Promise(resolve => setTimeout(resolve, 200));
 
             // Create an in-memory SVG element to render the barcode
+            const isMobile = window.innerWidth < 640; // Tailwind's sm breakpoint
             const svgNode = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 
-            // Call JsBarcode to populate the SVG element
             JsBarcode(svgNode, barcodeData.trim(), {
                 format: barcodeFormat,
                 lineColor: '#1f2937',
-                width: 2,
-                height: 100,
+                width: isMobile ? 1.2 : 1.8,
+                height: isMobile ? 50 : 80,
                 displayValue: true,
-                margin: 15,
-                fontSize: 14,
+                margin: isMobile ? 8 : 12,
+                fontSize: isMobile ? 10 : 12,
                 fontOptions: 'bold',
-                textMargin: 8,
+                textMargin: isMobile ? 4 : 6,
             });
 
             // Get the SVG markup as a string
@@ -161,23 +161,53 @@ export default function EnhancedBarcodeToolkit() {
         }
     };
 
-    const handleScanError = (err: any) => {
+    const [permissionDenied, setPermissionDenied] = useState(false);
+
+    const handleScanError = useCallback((err: any) => {
         console.error('Scanner error:', err);
-        setCameraError('Unable to access camera. Please check permissions and try again.');
+        if (err.name === 'NotAllowedError') {
+            setPermissionDenied(true);
+            setCameraError('Camera access was denied. Please reset permissions in your browser settings and try again.');
+        } else {
+            setCameraError(err.message || 'Unable to access camera. Please check permissions and try again.');
+        }
         setShowScanner(false);
         setIsLoading(false);
-    };
+    }, []);
 
     const startScanner = async () => {
         setIsLoading(true);
         setCameraError(null);
 
-        // Check camera permissions
         try {
-            await navigator.mediaDevices.getUserMedia({ video: true });
+            // Check camera permissions more thoroughly
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'environment',
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }
+            });
+
+            // Important: Stop any previous streams
+            stream.getTracks().forEach(track => track.stop());
+
             setShowScanner(true);
         } catch (err) {
-            setCameraError('Camera access denied. Please enable camera permissions and try again.');
+            console.error('Camera access error:', err);
+            let errorMessage = 'Camera access denied.';
+
+            if (err.name === 'NotAllowedError') {
+                errorMessage = 'Please enable camera permissions in your browser settings.';
+            } else if (err.name === 'NotFoundError') {
+                errorMessage = 'No camera device found.';
+            } else if (err.name === 'NotReadableError') {
+                errorMessage = 'Camera is already in use by another application.';
+            } else if (err.name === 'OverconstrainedError') {
+                errorMessage = 'Requested camera configuration not available.';
+            }
+
+            setCameraError(errorMessage);
             setIsLoading(false);
         }
     };
@@ -313,7 +343,7 @@ export default function EnhancedBarcodeToolkit() {
                                 <div className="space-y-6">
                                     {/* Barcode Display */}
                                     <div className="relative">
-                                        <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-8 rounded-xl border-2 border-dashed border-gray-200 min-h-[250px] flex items-center justify-center">
+                                        <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-4 sm:p-8 rounded-xl border-2 border-dashed border-gray-200 min-h-[180px] sm:min-h-[250px] flex items-center justify-center">
                                             {isGenerating ? (
                                                 <div className="text-center">
                                                     <div className="animate-spin w-8 h-8 border-3 border-indigo-300 border-t-indigo-600 rounded-full mx-auto mb-3"></div>
@@ -325,8 +355,13 @@ export default function EnhancedBarcodeToolkit() {
                                                     <p className="font-medium">{generationError}</p>
                                                 </div>
                                             ) : barcodeSvgString ? (
-                                                <div className="text-center w-full barcode-container"
-                                                    dangerouslySetInnerHTML={{ __html: barcodeSvgString }} />
+                                                <div className="w-full h-full flex items-center justify-center overflow-hidden">
+                                                    <div
+                                                        className="barcode-container mx-auto max-w-[90vw]"
+                                                        style={{ transform: 'scale(0.9)' }}
+                                                        dangerouslySetInnerHTML={{ __html: barcodeSvgString }}
+                                                    />
+                                                </div>
                                             ) : (
                                                 <div className="text-center text-gray-400">
                                                     <ScanBarcode className="w-16 h-16 mx-auto mb-4 opacity-30" />
@@ -388,6 +423,13 @@ export default function EnhancedBarcodeToolkit() {
                                             <Camera className="w-16 h-16 text-indigo-400 mb-4" />
                                             <p className="text-gray-600 text-lg font-medium">Ready to scan</p>
                                             <p className="text-gray-500 text-sm mt-2">Position barcode in camera view</p>
+
+                                            {/* Add helpful tips */}
+                                            <div className="mt-4 text-xs text-gray-400 max-w-xs mx-auto">
+                                                <p>• Ensure camera permissions are allowed</p>
+                                                <p>• Use in a well-lit environment</p>
+                                                <p>• Hold steady about 6-12 inches from barcode</p>
+                                            </div>
                                         </div>
 
                                         <button
@@ -433,6 +475,21 @@ export default function EnhancedBarcodeToolkit() {
                                         </div>
                                     </div>
                                 )}
+
+                                {permissionDenied && (
+                                    <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+                                        <div className="flex items-center gap-3">
+                                            <AlertCircle className="w-5 h-5 text-yellow-500 flex-shrink-0" />
+                                            <div>
+                                                <p className="text-yellow-700">Camera permissions were denied.</p>
+                                                <p className="text-sm text-yellow-600 mt-1">
+                                                    Please go to your browser settings and reset camera permissions for this site.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
                             </div>
                         </div>
 
